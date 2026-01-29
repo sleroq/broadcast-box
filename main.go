@@ -422,7 +422,7 @@ func main() {
 	}
 
 	webrtc.Configure()
-	chatManager = chat.NewManager()
+	chatManager = chat.NewManagerFromEnv()
 
 	if os.Getenv("NETWORK_TEST_ON_START") == "true" {
 		fmt.Println(networkTestIntroMessage) //nolint

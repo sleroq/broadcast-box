@@ -1,6 +1,7 @@
 package chat
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"strconv"
@@ -40,8 +41,6 @@ type Room struct {
 	streamKey    string
 	mu           sync.Mutex
 	subscribers  map[string]*subscriber
-	history      []Event
-	nextEventID  uint64
 	lastActivity time.Time
 }
 
@@ -52,16 +51,19 @@ type Session struct {
 }
 
 type Manager struct {
-	mu       sync.RWMutex
-	rooms    map[string]*Room
-	sessions map[string]*Session
+	historyRepo HistoryRepository
+	sessionRepo SessionRepository
+
+	mu    sync.RWMutex
+	rooms map[string]*Room
 
 	maxHistory      int
 	defaultTTL      time.Duration
 	cleanupInterval time.Duration
 }
 
-func NewManager() *Manager {
+// NewManager creates a new chat manager with the provided repositories
+func NewManager(historyRepo HistoryRepository, sessionRepo SessionRepository) *Manager {
 	maxHistory := DefaultMaxHistory
 	if val := os.Getenv("CHAT_MAX_HISTORY"); val != "" {
 		if i, err := strconv.Atoi(val); err == nil {
@@ -84,8 +86,9 @@ func NewManager() *Manager {
 	}
 
 	m := &Manager{
+		historyRepo:     historyRepo,
+		sessionRepo:     sessionRepo,
 		rooms:           make(map[string]*Room),
-		sessions:        make(map[string]*Session),
 		maxHistory:      maxHistory,
 		defaultTTL:      defaultTTL,
 		cleanupInterval: cleanupInterval,
@@ -100,18 +103,16 @@ func (m *Manager) Connect(streamKey string) string {
 
 	now := time.Now()
 	sessionID := uuid.New().String()
-	m.sessions[sessionID] = &Session{
+	m.sessionRepo.SaveSession(context.Background(), &Session{
 		ID:           sessionID,
 		StreamKey:    streamKey,
 		LastActivity: now,
-	}
+	})
 
 	if _, ok := m.rooms[streamKey]; !ok {
 		m.rooms[streamKey] = &Room{
 			streamKey:    streamKey,
 			subscribers:  make(map[string]*subscriber),
-			history:      make([]Event, 0, m.maxHistory),
-			nextEventID:  1,
 			lastActivity: now,
 		}
 	}
@@ -120,46 +121,31 @@ func (m *Manager) Connect(streamKey string) string {
 }
 
 func (m *Manager) GetSession(sessionID string) (*Session, bool) {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-
-	s, ok := m.sessions[sessionID]
-	if !ok {
-		return nil, false
-	}
-
-	s.LastActivity = time.Now()
-	copy := *s
-	return &copy, true
+	return m.sessionRepo.GetSession(context.Background(), sessionID)
 }
 
 func (m *Manager) TouchSession(sessionID string) bool {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-
-	s, ok := m.sessions[sessionID]
-	if !ok {
-		return false
-	}
-
-	s.LastActivity = time.Now()
-	return true
+	return m.sessionRepo.TouchSession(context.Background(), sessionID)
 }
 
 func (m *Manager) Subscribe(sessionID string, lastEventID uint64) (chan Event, func(), []Event, error) {
 	now := time.Now()
 
-	m.mu.Lock()
-	session, ok := m.sessions[sessionID]
+	session, ok := m.sessionRepo.GetSession(context.Background(), sessionID)
 	if !ok {
-		m.mu.Unlock()
 		return nil, nil, nil, fmt.Errorf("invalid session")
 	}
 	session.LastActivity = now
+
+	m.mu.Lock()
 	room, ok := m.rooms[session.StreamKey]
 	if !ok {
-		m.mu.Unlock()
-		return nil, nil, nil, fmt.Errorf("room not found")
+		room = &Room{
+			streamKey:    session.StreamKey,
+			subscribers:  make(map[string]*subscriber),
+			lastActivity: now,
+		}
+		m.rooms[session.StreamKey] = room
 	}
 	m.mu.Unlock()
 
@@ -173,16 +159,15 @@ func (m *Manager) Subscribe(sessionID string, lastEventID uint64) (chan Event, f
 	sub := &subscriber{ch: ch}
 	room.subscribers[subID] = sub
 
-	var history []Event
-	if lastEventID > 0 {
-		for _, ev := range room.history {
-			if ev.ID > lastEventID {
-				history = append(history, ev)
-			}
+	history, err := m.historyRepo.GetEvents(context.Background(), session.StreamKey, lastEventID)
+	if err != nil {
+		cleanup := func() {
+			room.mu.Lock()
+			defer room.mu.Unlock()
+			delete(room.subscribers, subID)
+			close(ch)
 		}
-	} else {
-		history = make([]Event, len(room.history))
-		copy(history, room.history)
+		return nil, cleanup, nil, err
 	}
 
 	cleanup := func() {
@@ -198,26 +183,19 @@ func (m *Manager) Subscribe(sessionID string, lastEventID uint64) (chan Event, f
 func (m *Manager) Send(sessionID string, text string, displayName string) error {
 	now := time.Now()
 
-	m.mu.Lock()
-	session, ok := m.sessions[sessionID]
+	session, ok := m.sessionRepo.GetSession(context.Background(), sessionID)
 	if !ok {
-		m.mu.Unlock()
 		return fmt.Errorf("invalid session")
 	}
 	session.LastActivity = now
-	room, ok := m.rooms[session.StreamKey]
-	if !ok {
-		m.mu.Unlock()
-		return fmt.Errorf("room not found")
+
+	nextEventID, err := m.historyRepo.GetNextEventID(context.Background(), session.StreamKey)
+	if err != nil {
+		return fmt.Errorf("failed to get next event ID: %w", err)
 	}
-	m.mu.Unlock()
 
-	room.mu.Lock()
-	defer room.mu.Unlock()
-
-	room.lastActivity = now
 	event := Event{
-		ID:   room.nextEventID,
+		ID:   nextEventID,
 		Type: EventTypeMessage,
 		Message: Message{
 			ID:          uuid.New().String(),
@@ -226,14 +204,23 @@ func (m *Manager) Send(sessionID string, text string, displayName string) error 
 			DisplayName: displayName,
 		},
 	}
-	room.nextEventID++
 
-	if len(room.history) >= m.maxHistory {
-		room.history = append(room.history[1:], event)
-	} else {
-		room.history = append(room.history, event)
+	if err := m.historyRepo.AppendEvent(context.Background(), session.StreamKey, event); err != nil {
+		return fmt.Errorf("failed to append event: %w", err)
 	}
 
+	m.mu.RLock()
+	room, ok := m.rooms[session.StreamKey]
+	m.mu.RUnlock()
+
+	if !ok {
+		return fmt.Errorf("room not found")
+	}
+
+	room.mu.Lock()
+	defer room.mu.Unlock()
+
+	room.lastActivity = now
 	for _, sub := range room.subscribers {
 		select {
 		case sub.ch <- event:
@@ -253,16 +240,15 @@ func (m *Manager) cleanupLoop() {
 }
 
 func (m *Manager) cleanup() {
+	ctx := context.Background()
+
+	m.sessionRepo.CleanupExpired(ctx, int64(m.defaultTTL.Seconds()))
+
+	// Cleanup empty rooms
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
 	now := time.Now()
-	for id, s := range m.sessions {
-		if now.Sub(s.LastActivity) > m.defaultTTL {
-			delete(m.sessions, id)
-		}
-	}
-
 	for key, r := range m.rooms {
 		r.mu.Lock()
 		if len(r.subscribers) == 0 && now.Sub(r.lastActivity) > m.defaultTTL {
