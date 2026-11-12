@@ -5,7 +5,7 @@ import { ArrowsPointingOutIcon, HeartIcon, PauseIcon, PlayIcon, XMarkIcon } from
 import { ChatBubbleLeftRightIcon } from '@heroicons/react/24/outline';
 import VolumeComponent from '../../components/player/components/VolumeComponent';
 import { StatusMessageComponent } from '../../components/player/components/StatusMessageComponent';
-import { broadcastName, relayUrl } from './config';
+import { relayUrl } from './config';
 import { Adaptation, profiles, type Profile } from './playback';
 import { useSocialSession } from './useSocialSession';
 import type { PlayerProps } from './ProtocolPlayer';
@@ -36,7 +36,7 @@ export default function MoqPlayer(props: PlayerProps & { onWebrtcLiveChange: (li
     watch.appendChild(canvas);
     watch.muted = true;
     watch.setAttribute('delay', '500ms');
-    watch.name = broadcastName(streamKey);
+    watch.name = streamKey;
     watch.url = relayUrl;
     watchRef.current = watch;
     host.appendChild(watch);

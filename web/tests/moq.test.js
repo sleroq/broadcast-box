@@ -1,9 +1,9 @@
 import { test } from 'node:test';
 import { strict as assert } from 'node:assert';
-import { broadcastName, normalizeStreamKey } from '../src/fork/moq/config.ts';
+import { normalizeStreamKey } from '../src/fork/moq/config.ts';
 import { readPreference, savePreference } from '../src/fork/moq/preference.ts';
 
-test('stream preferences persist independently using normalized keys and mapped names', () => {
+test('stream preferences persist independently using normalized keys', () => {
   const values = new Map();
   Object.assign(globalThis, { localStorage: {
     getItem: (key) => values.get(key) ?? null,
@@ -17,9 +17,9 @@ test('stream preferences persist independently using normalized keys and mapped 
   savePreference(other, 'moq');
   savePreference(main, 'webrtc');
   assert.equal(readPreference(other), 'moq');
-  assert.equal(broadcastName(main), 'live/main.hang');
-  assert.equal(broadcastName('other.hang'), 'live/other.hang');
-  assert.equal(broadcastName(other), 'live/other_stream.hang');
+  assert.equal(main, 'main');
+  assert.equal(normalizeStreamKey('other.hang'), 'other.hang');
+  assert.equal(other, 'other_stream');
   Object.assign(globalThis, { localStorage: { getItem: () => { throw new Error('unavailable'); }, setItem: () => { throw new Error('unavailable'); } } });
   assert.equal(readPreference(main), 'webrtc');
   assert.doesNotThrow(() => savePreference(main, 'moq'));
