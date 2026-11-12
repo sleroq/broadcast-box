@@ -46,10 +46,10 @@ export default function MoqPlayer(props: PlayerProps & { onWebrtcLiveChange: (li
 
     const reportLayout = () => {
       const display = watch.video.out.display.peek();
-      onLayoutChange({
-        aspectRatio: display ? display.width / display.height : 16 / 9,
+      onLayoutChange(display ? {
+        aspectRatio: display.width / display.height,
         controlsHeight: toolbar.offsetHeight,
-      });
+      } : undefined);
     };
     const toolbarObserver = new ResizeObserver(reportLayout);
     toolbarObserver.observe(toolbar);
@@ -163,7 +163,7 @@ export default function MoqPlayer(props: PlayerProps & { onWebrtcLiveChange: (li
       >
         <div ref={hostRef} className={`relative min-h-0 w-full ${props.fillContainer ? 'flex-1' : 'aspect-video'}`} />
         <video ref={videoRef} hidden muted playsInline />
-        <div className="pointer-events-none absolute inset-0">
+        <div className={`pointer-events-none absolute inset-0 ${state !== 'Playing' ? 'bg-gray-950' : ''}`}>
           <StatusMessageComponent streamKey={streamKey} state={state} />
         </div>
         <div className="absolute top-2 right-2 z-60 flex gap-2">
