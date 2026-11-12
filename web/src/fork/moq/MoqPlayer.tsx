@@ -31,7 +31,7 @@ export default function MoqPlayer(props: PlayerProps & { onWebrtcLiveChange: (li
 
     const watch = document.createElement('moq-watch');
     const canvas = document.createElement('canvas');
-    canvas.className = 'w-full h-full object-contain';
+    canvas.className = 'block w-full h-full object-contain object-top';
     watch.className = 'w-full h-full';
     watch.appendChild(canvas);
     watch.muted = true;
@@ -141,10 +141,10 @@ export default function MoqPlayer(props: PlayerProps & { onWebrtcLiveChange: (li
   return (
     <div className={`w-full flex items-end ${props.fillContainer ? 'h-full' : ''}`}>
       <div
-        className={`relative w-full rounded-md bg-gray-950 overflow-hidden ${props.fillContainer ? 'h-full' : 'aspect-video'}`}
+        className={`relative flex w-full flex-col rounded-md bg-gray-950 overflow-hidden ${props.fillContainer ? 'h-full' : ''}`}
         style={props.cinemaMode ? { maxHeight: '100vh', maxWidth: '100vw' } : {}}
       >
-        <div ref={hostRef} className="absolute inset-0" />
+        <div ref={hostRef} className={`relative min-h-0 w-full ${props.fillContainer ? 'flex-1' : 'aspect-video'}`} />
         <video ref={videoRef} hidden muted playsInline />
         <div className="pointer-events-none absolute inset-0">
           <StatusMessageComponent streamKey={streamKey} state={state} />
@@ -155,7 +155,7 @@ export default function MoqPlayer(props: PlayerProps & { onWebrtcLiveChange: (li
               type="button"
               aria-label="Toggle chat"
               onClick={props.onToggleChat}
-              className={`p-2 rounded-full border ${props.isChatOpen ? 'bg-blue-600 border-blue-500 text-white' : 'bg-black/60 border-gray-700 text-gray-200 hover:bg-gray-800'}`}
+              className={`p-2 rounded-full border cursor-pointer ${props.isChatOpen ? 'bg-blue-600 border-blue-500 text-white' : 'bg-black/60 border-gray-700 text-gray-200 hover:bg-gray-800'}`}
             >
               <ChatBubbleLeftRightIcon className="h-5 w-5" />
             </button>
@@ -165,17 +165,17 @@ export default function MoqPlayer(props: PlayerProps & { onWebrtcLiveChange: (li
               type="button"
               aria-label="Close stream"
               onClick={props.onCloseStream}
-              className="p-2 rounded-full bg-red-400 hover:bg-red-500"
+              className="p-2 rounded-full bg-red-400 hover:bg-red-500 cursor-pointer"
             >
               <XMarkIcon className="h-6 w-6 text-black" />
             </button>
           )}
         </div>
-        <div className="player-drag-handle absolute bottom-0 z-30 flex min-h-8 w-full flex-wrap items-center gap-2 rounded-md bg-blue-950 p-1 cursor-move">
-          <button type="button" className="player-drag-cancel" aria-label={paused ? 'Play' : 'Pause'} onClick={togglePlayback}>
+        <div className="player-drag-handle z-30 flex min-h-8 w-full shrink-0 flex-wrap items-center gap-2 rounded-md bg-blue-950 p-1 cursor-move">
+          <button type="button" className="player-drag-cancel cursor-pointer" aria-label={paused ? 'Play' : 'Pause'} onClick={togglePlayback}>
             {paused ? <PlayIcon className="w-5" /> : <PauseIcon className="w-5" />}
           </button>
-          <span className="player-drag-cancel">
+          <span className="player-drag-cancel cursor-pointer">
             <VolumeComponent
               isMuted={muted}
               volume={volume}
@@ -185,7 +185,7 @@ export default function MoqPlayer(props: PlayerProps & { onWebrtcLiveChange: (li
           </span>
           <select
             aria-label="Playback delay"
-            className="player-drag-cancel bg-blue-950 text-sm"
+            className="player-drag-cancel bg-blue-950 text-sm cursor-pointer"
             value={profile}
             onChange={selectProfile}
           >
@@ -194,10 +194,10 @@ export default function MoqPlayer(props: PlayerProps & { onWebrtcLiveChange: (li
             <option value="balanced">750 ms</option>
             <option value="resilient">1500 ms</option>
           </select>
-          <button type="button" className="player-drag-cancel text-sm" onClick={goLive}>Go live</button>
-          <button type="button" className="player-drag-cancel text-sm" onClick={retry}>Retry</button>
+          <button type="button" className="player-drag-cancel text-sm cursor-pointer" onClick={goLive}>Go live</button>
+          <button type="button" className="player-drag-cancel text-sm cursor-pointer" onClick={retry}>Retry</button>
           <span className="flex-1" />
-          <button type="button" className="player-drag-cancel" aria-label="Fullscreen" onClick={props.onFullscreen}>
+          <button type="button" className="player-drag-cancel cursor-pointer" aria-label="Fullscreen" onClick={props.onFullscreen}>
             <ArrowsPointingOutIcon className="w-5" />
           </button>
         </div>

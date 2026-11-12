@@ -37,7 +37,7 @@ function StreamPlayer({ normalizedKey, ...props }: PlayerProps & { normalizedKey
       title={switchLabel}
       onClick={switchProtocol}
       onDoubleClick={event => event.stopPropagation()}
-      className={`player-drag-cancel absolute top-2 left-2 z-70 p-2 rounded-full border focus-visible:outline focus-visible:outline-2 focus-visible:outline-white ${protocol === 'moq' ? 'bg-blue-600 border-blue-500 text-white' : 'bg-black/60 border-gray-700 text-gray-200 hover:bg-gray-800'}`}
+      className={`player-drag-cancel absolute top-2 left-2 z-70 p-2 rounded-full border cursor-pointer focus-visible:outline focus-visible:outline-2 focus-visible:outline-white ${protocol === 'moq' ? 'bg-blue-600 border-blue-500 text-white' : 'bg-black/60 border-gray-700 text-gray-200 hover:bg-gray-800'}`}
     >
       <ArrowsRightLeftIcon aria-hidden="true" className="h-5 w-5" />
       {otherLive && <span aria-hidden="true" className="absolute -top-0.5 -right-0.5 h-2.5 w-2.5 rounded-full border-2 border-gray-950 bg-green-400" />}
