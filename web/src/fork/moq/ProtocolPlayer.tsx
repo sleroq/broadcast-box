@@ -1,19 +1,25 @@
-import { useRef, useState, type ComponentProps } from 'react';
+import { useCallback, useRef, useState, type ComponentProps } from 'react';
 import { ArrowsRightLeftIcon } from '@heroicons/react/24/outline';
 import Player from '../../components/player/Player';
 import { normalizeStreamKey } from './config';
 import { readPreference, savePreference, type Protocol } from './preference';
 import { useMoqProbe } from './useMoqProbe';
 import MoqPlayer from './MoqPlayer';
+import type { PlayerLayout } from './layout';
 
 export type PlayerProps = ComponentProps<typeof Player>;
 
-export default function ProtocolPlayer(props: PlayerProps) {
+type ProtocolPlayerProps = PlayerProps & { onLayoutChange?: (streamKey: string, layout: PlayerLayout | undefined) => void };
+
+export default function ProtocolPlayer(props: ProtocolPlayerProps) {
   const streamKey = normalizeStreamKey(props.streamKey);
   return <StreamPlayer key={streamKey} {...props} normalizedKey={streamKey} />;
 }
 
-function StreamPlayer({ normalizedKey, ...props }: PlayerProps & { normalizedKey: string }) {
+function StreamPlayer({ normalizedKey, onLayoutChange, ...props }: ProtocolPlayerProps & { normalizedKey: string }) {
+  const reportLayout = useCallback((layout: PlayerLayout | undefined) => {
+    onLayoutChange?.(props.streamKey, layout);
+  }, [onLayoutChange, props.streamKey]);
   const wrapperRef = useRef<HTMLDivElement>(null);
   const [protocol, setProtocol] = useState<Protocol>(() => readPreference(normalizedKey));
   const [webrtcLive, setWebrtcLive] = useState(false);
@@ -22,6 +28,7 @@ function StreamPlayer({ normalizedKey, ...props }: PlayerProps & { normalizedKey
   const switchLabel = `Switch to ${protocol === 'webrtc' ? 'MoQ' : 'WebRTC'}${otherLive ? ' (live)' : ''}`;
   const switchProtocol = () => {
     const next = protocol === 'webrtc' ? 'moq' : 'webrtc';
+    if (next === 'webrtc') reportLayout(undefined);
     savePreference(normalizedKey, next);
     setProtocol(next);
     setWebrtcLive(false);
@@ -30,7 +37,7 @@ function StreamPlayer({ normalizedKey, ...props }: PlayerProps & { normalizedKey
     void wrapperRef.current?.requestFullscreen();
   }
   return <div ref={wrapperRef} className={`relative w-full ${props.fillContainer ? 'h-full' : ''}`}>
-    {protocol === 'webrtc' ? <Player {...props} /> : <MoqPlayer {...props} streamKey={normalizedKey} onWebrtcLiveChange={setWebrtcLive} onFullscreen={enterFullscreen} />}
+    {protocol === 'webrtc' ? <Player {...props} /> : <MoqPlayer {...props} streamKey={normalizedKey} onWebrtcLiveChange={setWebrtcLive} onFullscreen={enterFullscreen} onLayoutChange={reportLayout} />}
     <button
       type="button"
       aria-label={switchLabel}

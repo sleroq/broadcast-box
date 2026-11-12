@@ -1,6 +1,7 @@
 import { useCallback, useContext, useEffect, useState } from "react";
 import ReactGridLayout, { useContainerWidth } from "react-grid-layout";
 import Player from "../../fork/moq/ProtocolPlayer";
+import { playerHeight, type PlayerLayout } from "../../fork/moq/layout";
 import type { ReactionSender } from "./Player";
 import { useNavigate } from "react-router";
 import { CinemaModeContext } from "../../providers/CinemaModeProvider";
@@ -27,6 +28,7 @@ const PlayerPage = () => {
   const [chatAdapters, setChatAdapters] = useState<Record<string, ChatAdapter | undefined>>({});
   const [reactionSenders, setReactionSenders] = useState<Record<string, ReactionSender | undefined>>({});
   const [streamStatuses, setStreamStatuses] = useState<Record<string, StreamStatus | undefined>>({});
+  const [playerLayouts, setPlayerLayouts] = useState<Record<string, PlayerLayout | undefined>>({});
   const [isDisplayNameModalOpen, setIsDisplayNameModalOpen] = useState<boolean>(false);
   const [chatDisplayName, setChatDisplayName] = useState<string>(() => localStorage.getItem("chatDisplayName") ?? "");
 
@@ -81,6 +83,21 @@ const PlayerPage = () => {
     });
   }, []);
 
+  const setStreamLayout = useCallback((streamKey: string, layout: PlayerLayout | undefined) => {
+    setPlayerLayouts((current) => {
+      const previous = current[streamKey];
+      if (previous?.aspectRatio === layout?.aspectRatio && previous?.controlsHeight === layout?.controlsHeight) {
+        return current;
+      }
+      if (!layout) {
+        const next = { ...current };
+        delete next[streamKey];
+        return next;
+      }
+      return { ...current, [streamKey]: layout };
+    });
+  }, []);
+
   const removeStream = (streamKey: string) => {
     setStreamKeys((prev) => prev.filter((key) => key !== streamKey));
     setChatAdapters((current) => {
@@ -121,7 +138,7 @@ const PlayerPage = () => {
   const chatSidebarWidth = cinemaMode ? 320 : 336;
   const chatBelowHeight = isChatOpen && !isSingleStreamChatSidebar ? (isSingleStream ? 336 : 388) : 0;
   const playerWidth = Math.max(0, playerGridItemPixelWidth - (isSingleStreamChatSidebar ? chatSidebarWidth : 0));
-  const playerGridCardHeight = Math.ceil(playerWidth * 9 / 16 + 24 + chatBelowHeight);
+  const playerGridCardHeight = Math.ceil(Math.max(...streamKeys.map((key) => playerHeight(playerWidth, playerLayouts[key]))) + 24 + chatBelowHeight);
   const playerGridCardRows = Math.max(1, Math.ceil((playerGridCardHeight + playerGridGap) / (playerGridRowHeight + playerGridGap)));
   const chatPanelVariant = isSingleStreamChatSidebar ? "sidebar" : (isSingleStream ? "compact-below" : "below");
 
@@ -190,6 +207,7 @@ const PlayerPage = () => {
                         onChatAdapterChange={setStreamChatAdapter}
                         onReactionSenderChange={setStreamReactionSender}
                         onStreamStatusChange={setStreamStatus}
+                        onLayoutChange={setStreamLayout}
                         onCloseStream={isSingleStream ? () => navigate("/") : () => removeStream(streamKey)}
                       />
                     </div>

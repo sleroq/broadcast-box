@@ -2,6 +2,13 @@ import { test } from 'node:test';
 import { strict as assert } from 'node:assert';
 import { normalizeStreamKey } from '../src/fork/moq/config.ts';
 import { readPreference, savePreference } from '../src/fork/moq/preference.ts';
+import { playerHeight } from '../src/fork/moq/layout.ts';
+
+test('player height preserves WebRTC geometry and includes MoQ controls', () => {
+  assert.equal(playerHeight(1600), 900);
+  assert.equal(playerHeight(1512, { aspectRatio: 1512 / 982, controlsHeight: 32 }), 982 + 32);
+  assert.equal(playerHeight(756, { aspectRatio: 1512 / 982, controlsHeight: 56 }), 491 + 56);
+});
 
 test('stream preferences persist independently using normalized keys', () => {
   const values = new Map();

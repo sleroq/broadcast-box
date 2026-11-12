@@ -9,13 +9,15 @@ import { relayUrl } from './config';
 import { Adaptation, profiles, type Profile } from './playback';
 import { useSocialSession } from './useSocialSession';
 import type { PlayerProps } from './ProtocolPlayer';
+import type { PlayerLayout } from './layout';
 
 type State = 'Loading' | 'Playing' | 'Offline' | 'Error';
 
-export default function MoqPlayer(props: PlayerProps & { onWebrtcLiveChange: (live: boolean) => void; onFullscreen: () => void }) {
-  const { streamKey, onStreamStatusChange, onWebrtcLiveChange } = props;
+export default function MoqPlayer(props: PlayerProps & { onWebrtcLiveChange: (live: boolean) => void; onFullscreen: () => void; onLayoutChange: (layout: PlayerLayout | undefined) => void }) {
+  const { streamKey, onStreamStatusChange, onWebrtcLiveChange, onLayoutChange } = props;
   const { videoRef, status, reactions, removeReaction } = useSocialSession(props, onWebrtcLiveChange);
   const hostRef = useRef<HTMLDivElement>(null);
+  const toolbarRef = useRef<HTMLDivElement>(null);
   const watchRef = useRef<MoqWatch | null>(null);
   const adaptationRef = useRef(new Adaptation());
   const [state, setState] = useState<State>('Loading');
@@ -27,7 +29,8 @@ export default function MoqPlayer(props: PlayerProps & { onWebrtcLiveChange: (li
 
   useEffect(() => {
     const host = hostRef.current;
-    if (!host) return;
+    const toolbar = toolbarRef.current;
+    if (!host || !toolbar) return;
 
     const watch = document.createElement('moq-watch');
     const canvas = document.createElement('canvas');
@@ -40,6 +43,17 @@ export default function MoqPlayer(props: PlayerProps & { onWebrtcLiveChange: (li
     watch.url = relayUrl;
     watchRef.current = watch;
     host.appendChild(watch);
+
+    const reportLayout = () => {
+      const display = watch.video.out.display.peek();
+      onLayoutChange({
+        aspectRatio: display ? display.width / display.height : 16 / 9,
+        controlsHeight: toolbar.offsetHeight,
+      });
+    };
+    const toolbarObserver = new ResizeObserver(reportLayout);
+    toolbarObserver.observe(toolbar);
+    reportLayout();
 
     const update = () => {
       const connected = watch.connection.status.peek() === 'connected';
@@ -69,6 +83,7 @@ export default function MoqPlayer(props: PlayerProps & { onWebrtcLiveChange: (li
       watch.renderer.out.timestamp.subscribe(update),
       watch.audio.out.timestamp.subscribe(update),
       watch.audio.out.context.subscribe(update),
+      watch.video.out.display.subscribe(reportLayout),
       watch.controls.muted.subscribe(setMuted),
       watch.controls.volume.subscribe(value => setVolume(Math.round(value * 100))),
       watch.controls.paused.subscribe(setPaused),
@@ -88,12 +103,14 @@ export default function MoqPlayer(props: PlayerProps & { onWebrtcLiveChange: (li
 
     return () => {
       clearInterval(timer);
+      toolbarObserver.disconnect();
       dispose.forEach(unsubscribe => unsubscribe());
       watchRef.current = null;
       watch.remove();
       watch.signals.close();
+      onLayoutChange(undefined);
     };
-  }, [streamKey]);
+  }, [streamKey, onLayoutChange]);
 
   useEffect(() => {
     onStreamStatusChange?.(streamKey, { ...status, streamKey, isOnline });
@@ -171,7 +188,7 @@ export default function MoqPlayer(props: PlayerProps & { onWebrtcLiveChange: (li
             </button>
           )}
         </div>
-        <div className="player-drag-handle z-30 flex min-h-8 w-full shrink-0 flex-wrap items-center gap-2 rounded-md bg-blue-950 p-1 cursor-move">
+        <div ref={toolbarRef} className="player-drag-handle z-30 flex min-h-8 w-full shrink-0 flex-wrap items-center gap-2 rounded-md bg-blue-950 p-1 cursor-move">
           <button type="button" className="player-drag-cancel cursor-pointer" aria-label={paused ? 'Play' : 'Pause'} onClick={togglePlayback}>
             {paused ? <PlayIcon className="w-5" /> : <PauseIcon className="w-5" />}
           </button>
