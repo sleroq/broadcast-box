@@ -1,12 +1,13 @@
 import { useEffect, useRef, useState, type ChangeEvent, type CSSProperties } from 'react';
 import '@moq/watch/element';
 import type MoqWatch from '@moq/watch/element';
-import { ArrowsPointingOutIcon, HeartIcon, PauseIcon, PlayIcon, XMarkIcon } from '@heroicons/react/20/solid';
+import { ArrowsPointingOutIcon, Cog6ToothIcon, HeartIcon, PauseIcon, PlayIcon, XMarkIcon } from '@heroicons/react/20/solid';
 import { ChatBubbleLeftRightIcon } from '@heroicons/react/24/outline';
 import VolumeComponent from '../../components/player/components/VolumeComponent';
 import { StatusMessageComponent } from '../../components/player/components/StatusMessageComponent';
 import { relayUrl } from './config';
 import { Adaptation, profiles, type Profile } from './playback';
+import { NativeSettings } from './settings';
 import { useSocialSession } from './useSocialSession';
 import type { PlayerProps } from './ProtocolPlayer';
 import type { PlayerLayout } from './layout';
@@ -19,6 +20,7 @@ export default function MoqPlayer(props: PlayerProps & { onWebrtcLiveChange: (li
   const hostRef = useRef<HTMLDivElement>(null);
   const toolbarRef = useRef<HTMLDivElement>(null);
   const watchRef = useRef<MoqWatch | null>(null);
+  const settingsRef = useRef<NativeSettings | null>(null);
   const adaptationRef = useRef(new Adaptation());
   const [state, setState] = useState<State>('Loading');
   const [isOnline, setIsOnline] = useState(false);
@@ -26,6 +28,7 @@ export default function MoqPlayer(props: PlayerProps & { onWebrtcLiveChange: (li
   const [muted, setMuted] = useState(true);
   const [volume, setVolume] = useState(50);
   const [profile, setProfile] = useState<Profile>('auto');
+  const [customDelay, setCustomDelay] = useState(500);
 
   useEffect(() => {
     const host = hostRef.current;
@@ -34,7 +37,7 @@ export default function MoqPlayer(props: PlayerProps & { onWebrtcLiveChange: (li
 
     const watch = document.createElement('moq-watch');
     const canvas = document.createElement('canvas');
-    canvas.className = 'block w-full h-full object-contain object-top';
+    canvas.className = 'block w-full h-full! object-contain object-top';
     watch.className = 'w-full h-full';
     watch.appendChild(canvas);
     watch.muted = true;
@@ -42,7 +45,15 @@ export default function MoqPlayer(props: PlayerProps & { onWebrtcLiveChange: (li
     watch.name = streamKey;
     watch.url = relayUrl;
     watchRef.current = watch;
-    host.appendChild(watch);
+    function applyNativeDelay(value: MoqWatch['delay']) {
+      const next = value === 'auto' ? new Adaptation('auto') : new Adaptation('custom', value === 'instant' ? 100 : value);
+      adaptationRef.current = next;
+      setProfile(next.profile);
+      if (next.profile === 'custom') setCustomDelay(next.delay);
+      watch.setAttribute('delay', `${next.delay}ms`);
+    }
+    const settings = NativeSettings.mount(host, watch, applyNativeDelay);
+    settingsRef.current = settings;
 
     const reportLayout = () => {
       const display = watch.video.out.display.peek();
@@ -87,6 +98,9 @@ export default function MoqPlayer(props: PlayerProps & { onWebrtcLiveChange: (li
       watch.controls.muted.subscribe(setMuted),
       watch.controls.volume.subscribe(value => setVolume(Math.round(value * 100))),
       watch.controls.paused.subscribe(setPaused),
+      watch.controls.delay.subscribe(value => {
+        if (value !== adaptationRef.current.delay) applyNativeDelay(value);
+      }),
     ];
     setMuted(watch.controls.muted.peek());
     setVolume(Math.round(watch.controls.volume.peek() * 100));
@@ -105,8 +119,9 @@ export default function MoqPlayer(props: PlayerProps & { onWebrtcLiveChange: (li
       clearInterval(timer);
       toolbarObserver.disconnect();
       dispose.forEach(unsubscribe => unsubscribe());
+      settingsRef.current = null;
+      settings.close();
       watchRef.current = null;
-      watch.remove();
       watch.signals.close();
       onLayoutChange(undefined);
     };
@@ -132,14 +147,15 @@ export default function MoqPlayer(props: PlayerProps & { onWebrtcLiveChange: (li
   function selectProfile(event: ChangeEvent<HTMLSelectElement>) {
     const value = profiles.find(candidate => candidate === event.target.value) ?? 'auto';
     setProfile(value);
-    adaptationRef.current = new Adaptation(value);
+    adaptationRef.current = new Adaptation(value, customDelay);
     if (watchRef.current) watchRef.current.setAttribute('delay', `${adaptationRef.current.delay}ms`);
   }
 
   function goLive() {
     const watch = watchRef.current;
     if (!watch) return;
-    adaptationRef.current = new Adaptation(profile);
+    const adaptation = adaptationRef.current;
+    adaptationRef.current = new Adaptation(adaptation.profile, adaptation.delay);
     watch.setAttribute('delay', `${adaptationRef.current.delay}ms`);
     watch.reset();
     watch.paused = false;
@@ -210,10 +226,14 @@ export default function MoqPlayer(props: PlayerProps & { onWebrtcLiveChange: (li
             <option value="low">250 ms</option>
             <option value="balanced">750 ms</option>
             <option value="resilient">1500 ms</option>
+            {profile === 'custom' && <option value="custom">{customDelay} ms (custom)</option>}
           </select>
           <button type="button" className="player-drag-cancel text-sm cursor-pointer" onClick={goLive}>Go live</button>
           <button type="button" className="player-drag-cancel text-sm cursor-pointer" onClick={retry}>Retry</button>
           <span className="flex-1" />
+          <button type="button" className="player-drag-cancel cursor-pointer" title="MoQ settings and stats" aria-label="MoQ settings and stats" aria-haspopup="dialog" onClick={event => settingsRef.current?.toggle(event.currentTarget)}>
+            <Cog6ToothIcon className="w-5" />
+          </button>
           <button type="button" className="player-drag-cancel cursor-pointer" aria-label="Fullscreen" onClick={props.onFullscreen}>
             <ArrowsPointingOutIcon className="w-5" />
           </button>

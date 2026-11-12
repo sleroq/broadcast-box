@@ -1,19 +1,21 @@
-export const profiles = ['auto', 'low', 'balanced', 'resilient'] as const;
+export const profiles = ['auto', 'low', 'balanced', 'resilient', 'custom'] as const;
 export type Profile = typeof profiles[number];
 export function profileDelay(profile: Profile): number {
-  return { auto: 500, low: 250, balanced: 750, resilient: 1500 }[profile];
+  return { auto: 500, low: 250, balanced: 750, resilient: 1500, custom: 500 }[profile];
 }
 
 /** Health clocks are local monotonic milliseconds, not media timestamps. */
 export class Adaptation {
   delay: number;
+  profile: Profile;
   private activeSince: number | undefined;
   private stableSince: number | undefined;
   private lastRise = -Infinity;
   private lastFall = -Infinity;
 
-  constructor(public profile: Profile = 'auto') {
-    this.delay = profileDelay(profile);
+  constructor(profile: Profile = 'auto', customDelay = 500) {
+    this.profile = profile;
+    this.delay = profile === 'custom' ? Math.max(100, Math.min(2000, customDelay)) : profileDelay(profile);
   }
 
   resetHealth(): void {
