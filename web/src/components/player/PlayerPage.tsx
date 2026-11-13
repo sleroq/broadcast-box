@@ -195,7 +195,10 @@ const PlayerPage = () => {
             {streamKeys.map((streamKey) => {
               return (
                 <div key={`${streamKey}_player_card`} className="min-w-0 flex h-full flex-col gap-1 overflow-hidden">
-                  <div className={isSingleStream ? "relative flex min-h-0 flex-1 flex-col gap-4 w-full" : "flex min-h-0 flex-1 flex-col gap-1"}>
+                  <div
+                    className={isSingleStream ? "relative flex min-h-0 flex-1 flex-col gap-4 w-full" : "flex min-h-0 flex-1 flex-col gap-1"}
+                    style={playerLayouts[streamKey] ? { maxHeight: playerHeight(playerWidth, playerLayouts[streamKey]) + chatBelowHeight } : undefined}
+                  >
                     <div className={isSingleStream ? `min-w-0 min-h-0 flex-1 transition-[margin] duration-200 ${isSingleStreamChatSidebar ? (cinemaMode ? "mr-80" : "mr-[21rem]") : ""}` : "min-w-0 min-h-0 flex-1"}>
                       <Player
                         key={`${streamKey}_player`}
