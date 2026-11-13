@@ -41,6 +41,8 @@ enum SetupPeerConnectionStateChange {
 
 export interface SetupPeerConnectionProps {
 	streamKey: string,
+	receiveMedia?: boolean,
+	signal?: AbortSignal,
 	videoRef: RefObject<HTMLVideoElement | null>,
 	layerEndpointRef: RefObject<string>,
 
@@ -75,6 +77,8 @@ const clearVideoElement = (videoElement: HTMLVideoElement | null) => {
 export async function PeerConnectionSetup(props: SetupPeerConnectionProps): Promise<RTCPeerConnection> {
 	const {
 		streamKey,
+		receiveMedia = true,
+		signal,
 		videoRef,
 		layerEndpointRef,
 		onStreamRestart,
@@ -118,20 +122,24 @@ export async function PeerConnectionSetup(props: SetupPeerConnectionProps): Prom
 		}
 
 		isClosed = true
+		signal?.removeEventListener("abort", closeConnection)
 		evtSource?.close()
 		clearDataChannels()
 		peerConnection.close()
 	}
 
+	signal?.addEventListener("abort", closeConnection, { once: true })
+
 	try {
+		signal?.throwIfAborted()
 		// Publish before negotiation so chat history and early raw messages have listeners.
 		// Every failure path below rolls this exact bundle back through closeConnection.
 		dataChannelsPublished = true
 		onDataChannelsChange?.(dataChannels, true)
 
 		// Config
-		peerConnection.addTransceiver('audio', { direction: 'recvonly' })
-		peerConnection.addTransceiver('video', { direction: 'recvonly' })
+		peerConnection.addTransceiver('audio', { direction: receiveMedia ? 'recvonly' : 'inactive' })
+		peerConnection.addTransceiver('video', { direction: receiveMedia ? 'recvonly' : 'inactive' })
 
 		// Setup events
 		const remoteStream = new MediaStream();
@@ -153,6 +161,7 @@ export async function PeerConnectionSetup(props: SetupPeerConnectionProps): Prom
 
 		const whepResponse = await fetch(`/api/whep`, {
 			method: 'POST',
+			signal,
 			headers: {
 				Authorization: `Bearer ${streamKey}`,
 				'Content-Type': 'application/sdp'
@@ -160,6 +169,7 @@ export async function PeerConnectionSetup(props: SetupPeerConnectionProps): Prom
 			body: offer.sdp,
 		})
 
+		signal?.throwIfAborted()
 		if (!whepResponse.ok) {
 			onError(SetupPeerConnectionError.INVALID_WHEP_RESPONSE)
 			throw new Error(`Invalid WHEP response: ${whepResponse.status}`)

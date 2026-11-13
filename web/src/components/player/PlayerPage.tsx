@@ -1,6 +1,8 @@
 import { useCallback, useContext, useEffect, useState } from "react";
 import ReactGridLayout, { useContainerWidth } from "react-grid-layout";
-import Player, { type ReactionSender } from "./Player";
+import Player from "../../fork/moq/ProtocolPlayer";
+import { playerHeight, type PlayerLayout } from "../../fork/moq/layout";
+import type { ReactionSender } from "./Player";
 import { useNavigate } from "react-router";
 import { CinemaModeContext } from "../../providers/CinemaModeProvider";
 import ModalTextInput from "../shared/ModalTextInput";
@@ -26,6 +28,7 @@ const PlayerPage = () => {
   const [chatAdapters, setChatAdapters] = useState<Record<string, ChatAdapter | undefined>>({});
   const [reactionSenders, setReactionSenders] = useState<Record<string, ReactionSender | undefined>>({});
   const [streamStatuses, setStreamStatuses] = useState<Record<string, StreamStatus | undefined>>({});
+  const [playerLayouts, setPlayerLayouts] = useState<Record<string, PlayerLayout | undefined>>({});
   const [isDisplayNameModalOpen, setIsDisplayNameModalOpen] = useState<boolean>(false);
   const [chatDisplayName, setChatDisplayName] = useState<string>(() => localStorage.getItem("chatDisplayName") ?? "");
 
@@ -80,6 +83,21 @@ const PlayerPage = () => {
     });
   }, []);
 
+  const setStreamLayout = useCallback((streamKey: string, layout: PlayerLayout | undefined) => {
+    setPlayerLayouts((current) => {
+      const previous = current[streamKey];
+      if (previous?.aspectRatio === layout?.aspectRatio && previous?.controlsHeight === layout?.controlsHeight) {
+        return current;
+      }
+      if (!layout) {
+        const next = { ...current };
+        delete next[streamKey];
+        return next;
+      }
+      return { ...current, [streamKey]: layout };
+    });
+  }, []);
+
   const removeStream = (streamKey: string) => {
     setStreamKeys((prev) => prev.filter((key) => key !== streamKey));
     setChatAdapters((current) => {
@@ -120,7 +138,7 @@ const PlayerPage = () => {
   const chatSidebarWidth = cinemaMode ? 320 : 336;
   const chatBelowHeight = isChatOpen && !isSingleStreamChatSidebar ? (isSingleStream ? 336 : 388) : 0;
   const playerWidth = Math.max(0, playerGridItemPixelWidth - (isSingleStreamChatSidebar ? chatSidebarWidth : 0));
-  const playerGridCardHeight = Math.ceil(playerWidth * 9 / 16 + 24 + chatBelowHeight);
+  const playerGridCardHeight = Math.ceil(Math.max(...streamKeys.map((key) => playerHeight(playerWidth, playerLayouts[key]))) + 24 + chatBelowHeight);
   const playerGridCardRows = Math.max(1, Math.ceil((playerGridCardHeight + playerGridGap) / (playerGridRowHeight + playerGridGap)));
   const chatPanelVariant = isSingleStreamChatSidebar ? "sidebar" : (isSingleStream ? "compact-below" : "below");
 
@@ -177,7 +195,10 @@ const PlayerPage = () => {
             {streamKeys.map((streamKey) => {
               return (
                 <div key={`${streamKey}_player_card`} className="min-w-0 flex h-full flex-col gap-1 overflow-hidden">
-                  <div className={isSingleStream ? "relative flex min-h-0 flex-1 flex-col gap-4 w-full" : "flex min-h-0 flex-1 flex-col gap-1"}>
+                  <div
+                    className={isSingleStream ? "relative flex min-h-0 flex-1 flex-col gap-4 w-full" : "flex min-h-0 flex-1 flex-col gap-1"}
+                    style={playerLayouts[streamKey] ? { maxHeight: playerHeight(playerWidth, playerLayouts[streamKey]) + chatBelowHeight } : undefined}
+                  >
                     <div className={isSingleStream ? `min-w-0 min-h-0 flex-1 transition-[margin] duration-200 ${isSingleStreamChatSidebar ? (cinemaMode ? "mr-80" : "mr-[21rem]") : ""}` : "min-w-0 min-h-0 flex-1"}>
                       <Player
                         key={`${streamKey}_player`}
@@ -189,6 +210,7 @@ const PlayerPage = () => {
                         onChatAdapterChange={setStreamChatAdapter}
                         onReactionSenderChange={setStreamReactionSender}
                         onStreamStatusChange={setStreamStatus}
+                        onLayoutChange={setStreamLayout}
                         onCloseStream={isSingleStream ? () => navigate("/") : () => removeStream(streamKey)}
                       />
                     </div>
